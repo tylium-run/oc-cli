@@ -1,4 +1,8 @@
 node_modules/
 dist/
 .env
+.env.*
 *.tsbuildinfo
+*.log
+.DS_Store
+.oc-cli.json

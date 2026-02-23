@@ -185,12 +185,13 @@ export function resolveConfig(overrides: CliOverrides = {}): Config {
     activeProfileName = overrides.profile;
     const found = profiles[activeProfileName];
     if (!found) {
-      const available = profileNames.length > 0
-        ? ` Available: ${profileNames.join(", ")}`
-        : " No profiles configured.";
+      const available =
+        profileNames.length > 0
+          ? ` Available: ${profileNames.join(", ")}`
+          : " No profiles configured.";
       throw new Error(
         `Profile "${activeProfileName}" not found.${available} ` +
-        `Run \`oc-cli profile add <name>\` to create one.`,
+          `Run \`oc-cli profile add <name>\` to create one.`,
       );
     }
     activeProfile = found;
@@ -199,30 +200,21 @@ export function resolveConfig(overrides: CliOverrides = {}): Config {
     activeProfileName = profileNames[0];
     activeProfile = profiles[activeProfileName];
   } else if (profileNames.length === 0) {
-    throw new Error(
-      "No profiles configured. Run `oc-cli profile add <name>` to create one.",
-    );
+    throw new Error("No profiles configured. Run `oc-cli profile add <name>` to create one.");
   } else {
     throw new Error(
-      `Multiple profiles configured: ${profileNames.join(", ")}. ` +
-      `Use -p <name> to select one.`,
+      `Multiple profiles configured: ${profileNames.join(", ")}. ` + `Use -p <name> to select one.`,
     );
   }
 
   // ---- Resolve baseUrl ----
   // Priority: CLI flag > env var > profile value
-  const baseUrl =
-    overrides.baseUrl ??
-    process.env.OC_BASE_URL ??
-    activeProfile.baseUrl;
+  const baseUrl = overrides.baseUrl ?? process.env.OC_BASE_URL ?? activeProfile.baseUrl;
 
   // ---- Resolve titlePrefix ----
   // Priority: CLI flag > env var > config file global
   const globalPrefix =
-    overrides.titlePrefix ??
-    process.env.OC_TITLE_PREFIX ??
-    file.titlePrefix ??
-    "";
+    overrides.titlePrefix ?? process.env.OC_TITLE_PREFIX ?? file.titlePrefix ?? "";
 
   // Auto-append [profileName] to the global prefix.
   // "[bishop]" + "safegold-react" → "[bishop][safegold-react] "

@@ -26,9 +26,7 @@ function collect(value: string, previous: string[]): string[] {
 }
 
 export function registerProfileCommands(program: Command): void {
-  const profile = program
-    .command("profile")
-    .description("Manage configuration profiles");
+  const profile = program.command("profile").description("Manage configuration profiles");
 
   // ---- profile list ----
   profile
@@ -76,9 +74,8 @@ export function registerProfileCommands(program: Command): void {
       const p = getProfile(name);
       if (!p) {
         const available = Object.keys(getProfiles());
-        const hint = available.length > 0
-          ? ` Available: ${available.join(", ")}`
-          : " No profiles configured.";
+        const hint =
+          available.length > 0 ? ` Available: ${available.join(", ")}` : " No profiles configured.";
         printError(`Profile "${name}" not found.${hint}`);
         return;
       }
@@ -112,7 +109,9 @@ export function registerProfileCommands(program: Command): void {
       try {
         // Check if profile already exists.
         if (getProfile(name)) {
-          printError(`Profile "${name}" already exists. Use \`oc-cli profile set ${name} <key> <value>\` to update it.`);
+          printError(
+            `Profile "${name}" already exists. Use \`oc-cli profile set ${name} <key> <value>\` to update it.`,
+          );
           return;
         }
 
@@ -128,7 +127,12 @@ export function registerProfileCommands(program: Command): void {
           directory = options.directory;
           defaultAgent = options.agent;
           description = options.description;
-          tags = options.tags ? options.tags.split(",").map((t: string) => t.trim()).filter(Boolean) : undefined;
+          tags = options.tags
+            ? options.tags
+                .split(",")
+                .map((t: string) => t.trim())
+                .filter(Boolean)
+            : undefined;
         } else if (process.stdin.isTTY) {
           // Interactive mode — prompt for each field.
           const rl = createInterface({
@@ -148,15 +152,22 @@ export function registerProfileCommands(program: Command): void {
             const dirAnswer = await rl.question("Directory (optional, press Enter to skip): ");
             directory = dirAnswer.trim() || undefined;
 
-            const agentAnswer = await rl.question("Default agent (optional, press Enter to skip): ");
+            const agentAnswer = await rl.question(
+              "Default agent (optional, press Enter to skip): ",
+            );
             defaultAgent = agentAnswer.trim() || undefined;
 
             const descAnswer = await rl.question("Description (optional, press Enter to skip): ");
             description = descAnswer.trim() || undefined;
 
-            const tagsAnswer = await rl.question("Tags (optional, comma-separated, press Enter to skip): ");
+            const tagsAnswer = await rl.question(
+              "Tags (optional, comma-separated, press Enter to skip): ",
+            );
             tags = tagsAnswer.trim()
-              ? tagsAnswer.split(",").map((t) => t.trim()).filter(Boolean)
+              ? tagsAnswer
+                  .split(",")
+                  .map((t) => t.trim())
+                  .filter(Boolean)
               : undefined;
           } finally {
             rl.close();
@@ -165,7 +176,7 @@ export function registerProfileCommands(program: Command): void {
           // Not a TTY and no --url flag — can't prompt interactively.
           printError(
             "No --url provided and stdin is not interactive. " +
-            "Usage: oc-cli profile add <name> --url <url> [--directory <path>] [--agent <name>]",
+              "Usage: oc-cli profile add <name> --url <url> [--directory <path>] [--agent <name>]",
           );
           return;
         }
@@ -178,7 +189,9 @@ export function registerProfileCommands(program: Command): void {
           // Warn but still save the profile.
           const message = err instanceof Error ? err.message : "Unknown error";
           console.error(
-            JSON.stringify({ warning: `Could not connect to ${baseUrl}: ${message}. Profile saved anyway.` }),
+            JSON.stringify({
+              warning: `Could not connect to ${baseUrl}: ${message}. Profile saved anyway.`,
+            }),
           );
         }
 
@@ -206,9 +219,8 @@ export function registerProfileCommands(program: Command): void {
       const removed = removeProfile(name);
       if (!removed) {
         const available = Object.keys(getProfiles());
-        const hint = available.length > 0
-          ? ` Available: ${available.join(", ")}`
-          : " No profiles configured.";
+        const hint =
+          available.length > 0 ? ` Available: ${available.join(", ")}` : " No profiles configured.";
         printError(`Profile "${name}" not found.${hint}`);
         return;
       }
@@ -222,9 +234,7 @@ export function registerProfileCommands(program: Command): void {
     .description("Set a field on an existing profile")
     .action((name: string, key: string, value: string) => {
       if (!PROFILE_KEYS.includes(key as keyof Profile)) {
-        printError(
-          `Unknown profile key: "${key}". Valid keys: ${PROFILE_KEYS.join(", ")}`,
-        );
+        printError(`Unknown profile key: "${key}". Valid keys: ${PROFILE_KEYS.join(", ")}`);
         return;
       }
 
@@ -237,7 +247,10 @@ export function registerProfileCommands(program: Command): void {
       // Special handling for tags: parse comma-separated string into array.
       let parsedValue: string | string[] = value;
       if (key === "tags") {
-        parsedValue = value.split(",").map((t) => t.trim()).filter(Boolean);
+        parsedValue = value
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
       }
 
       const updated = { ...existing, [key]: parsedValue };

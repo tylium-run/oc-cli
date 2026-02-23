@@ -114,10 +114,7 @@ function ensureHeader(
 
 // ---- Main formatter ----
 
-export function formatEvent(
-  event: Record<string, unknown>,
-  state: FormatterState,
-): string[] {
+export function formatEvent(event: Record<string, unknown>, state: FormatterState): string[] {
   const type = event.type as string;
   const props = (event.properties ?? {}) as Record<string, unknown>;
   const lines: string[] = [];
@@ -138,7 +135,7 @@ export function formatEvent(
       endStreaming(state);
       if (state.hasOutput) lines.push(separator());
       lines.push(
-        `${chalk.green("+")} Session ${chalk.bold(info?.title as string || info?.slug as string || "")} ${chalk.dim(info?.id as string)}`,
+        `${chalk.green("+")} Session ${chalk.bold((info?.title as string) || (info?.slug as string) || "")} ${chalk.dim(info?.id as string)}`,
       );
       break;
     }
@@ -147,9 +144,7 @@ export function formatEvent(
       const info = props.info as Record<string, unknown>;
       endStreaming(state);
       if (state.hasOutput) lines.push(separator());
-      lines.push(
-        `${chalk.red("-")} Session deleted ${chalk.dim(info?.id as string)}`,
-      );
+      lines.push(`${chalk.red("-")} Session deleted ${chalk.dim(info?.id as string)}`);
       break;
     }
 
@@ -380,7 +375,9 @@ export function formatEvent(
         const stats = [
           additions > 0 ? chalk.green(`+${additions}`) : "",
           deletions > 0 ? chalk.red(`-${deletions}`) : "",
-        ].filter(Boolean).join(" ");
+        ]
+          .filter(Boolean)
+          .join(" ");
         lines.push(`  ${chalk.dim(path)} ${stats}`);
       }
       if (diffs.length > 8) {
@@ -417,7 +414,8 @@ export function formatEvent(
 
     case "permission.replied": {
       const reply = (props.reply ?? props.response ?? "") as string;
-      const label = reply === "reject" ? chalk.red("Rejected") : chalk.green(`Permitted (${reply})`);
+      const label =
+        reply === "reject" ? chalk.red("Rejected") : chalk.green(`Permitted (${reply})`);
       lines.push(label);
       break;
     }
@@ -444,7 +442,9 @@ export function formatEvent(
           const opt = qOptions[i];
           const label = opt.label as string;
           const desc = opt.description as string;
-          lines.push(`  ${chalk.cyan(`${i + 1}.`)} ${chalk.white(label)}${desc ? chalk.dim(` — ${desc}`) : ""}`);
+          lines.push(
+            `  ${chalk.cyan(`${i + 1}.`)} ${chalk.white(label)}${desc ? chalk.dim(` — ${desc}`) : ""}`,
+          );
         }
 
         if (multiple) {
@@ -477,10 +477,13 @@ export function formatEvent(
       for (const todo of todos) {
         const todoStatus = todo.status as string;
         const icon =
-          todoStatus === "completed" ? chalk.green("✓") :
-          todoStatus === "in_progress" ? chalk.yellow("▸") :
-          todoStatus === "cancelled" ? chalk.dim("✗") :
-          chalk.dim("○");
+          todoStatus === "completed"
+            ? chalk.green("✓")
+            : todoStatus === "in_progress"
+              ? chalk.yellow("▸")
+              : todoStatus === "cancelled"
+                ? chalk.dim("✗")
+                : chalk.dim("○");
         lines.push(`  ${icon} ${todo.content as string}`);
       }
       break;

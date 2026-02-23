@@ -84,10 +84,7 @@ export function printError(message: string): never {
  * Supports dot notation for nested fields:
  *   --filter summary.files=0     → rows where summary.files contains "0"
  */
-function filterData(
-  data: Record<string, unknown>[],
-  filters: string[],
-): Record<string, unknown>[] {
+function filterData(data: Record<string, unknown>[], filters: string[]): Record<string, unknown>[] {
   // Parse each "key=value" string into a { key, value } pair.
   const conditions = filters.map((f) => {
     const eqIndex = f.indexOf("=");
@@ -96,7 +93,10 @@ function filterData(
     }
     return {
       key: f.slice(0, eqIndex).trim(),
-      value: f.slice(eqIndex + 1).trim().toLowerCase(),
+      value: f
+        .slice(eqIndex + 1)
+        .trim()
+        .toLowerCase(),
     };
   });
 
@@ -132,10 +132,7 @@ function resolveDotPath(obj: Record<string, unknown>, path: string): unknown {
  * Example: filterFields([{id: 1, name: "a", extra: true}], "id,name")
  *        → [{id: 1, name: "a"}]
  */
-function filterFields(
-  data: Record<string, unknown>[],
-  fields: string,
-): Record<string, unknown>[] {
+function filterFields(data: Record<string, unknown>[], fields: string): Record<string, unknown>[] {
   const keys = fields.split(",").map((f) => f.trim());
   return data.map((item) => {
     const filtered: Record<string, unknown> = {};
@@ -157,15 +154,11 @@ function printTable(
   columns: { key: string; label: string; width: number }[],
 ): void {
   // If --fields filtered out some columns, only show columns that exist in the data.
-  const dataKeys =
-    data.length > 0 ? new Set(Object.keys(data[0] as object)) : new Set<string>();
-  const visibleColumns =
-    data.length > 0 ? columns.filter((c) => dataKeys.has(c.key)) : columns;
+  const dataKeys = data.length > 0 ? new Set(Object.keys(data[0] as object)) : new Set<string>();
+  const visibleColumns = data.length > 0 ? columns.filter((c) => dataKeys.has(c.key)) : columns;
 
   // Print header row — bold and cyan.
-  const header = visibleColumns
-    .map((c) => chalk.bold.cyan(c.label.padEnd(c.width)))
-    .join("  ");
+  const header = visibleColumns.map((c) => chalk.bold.cyan(c.label.padEnd(c.width))).join("  ");
   console.log(header);
   console.log(chalk.dim("-".repeat(visibleColumns.reduce((sum, c) => sum + c.width + 2, -2))));
 

@@ -45,9 +45,7 @@ function getConfig(program: Command): Config {
 }
 
 export function registerSessionCommands(program: Command): void {
-  const session = program
-    .command("session")
-    .description("Manage OpenCode sessions");
+  const session = program.command("session").description("Manage OpenCode sessions");
 
   // ---- session list ----
   session
@@ -67,7 +65,9 @@ export function registerSessionCommands(program: Command): void {
 
         if (options.mine) {
           if (!config.titlePrefix) {
-            printError("Cannot use --mine: no titlePrefix is configured. Set one with: oc-cli config set titlePrefix \"[prefix] \"");
+            printError(
+              'Cannot use --mine: no titlePrefix is configured. Set one with: oc-cli config set titlePrefix "[prefix] "',
+            );
           }
           data = data.filter((s) => {
             const title = String(s.title ?? "");
@@ -103,9 +103,7 @@ export function registerSessionCommands(program: Command): void {
         // Auto-prepend titlePrefix to the title if both exist.
         let title = options.title;
         if (config.titlePrefix) {
-          title = title
-            ? config.titlePrefix + title
-            : config.titlePrefix.trimEnd();
+          title = title ? config.titlePrefix + title : config.titlePrefix.trimEnd();
         }
 
         const result = await client.session.create({
@@ -162,11 +160,7 @@ export function registerSessionCommands(program: Command): void {
           { key: "id", label: "ID", width: 35 },
         ];
 
-        printData(
-          result.data as unknown as Record<string, unknown>[],
-          options,
-          columns,
-        );
+        printData(result.data as unknown as Record<string, unknown>[], options, columns);
       } catch (error) {
         printError(error instanceof Error ? error.message : "Unknown error");
       }
@@ -201,13 +195,13 @@ export function registerSessionCommands(program: Command): void {
         if (sources === 0) {
           printError(
             "No message provided. Provide inline text, --file <path>, or --stdin.\n" +
-            "Usage: oc-cli session prompt <sessionId> \"message\""
+              'Usage: oc-cli session prompt <sessionId> "message"',
           );
           return;
         }
         if (sources > 1) {
           printError(
-            "Multiple message sources provided. Use only one of: inline text, --file, or --stdin."
+            "Multiple message sources provided. Use only one of: inline text, --file, or --stdin.",
           );
           return;
         }
@@ -243,7 +237,7 @@ export function registerSessionCommands(program: Command): void {
           const slashIndex = options.model.indexOf("/");
           if (slashIndex === -1) {
             printError(
-              `Invalid --model format: "${options.model}". Expected provider/model (e.g. google/gemini-2.5-pro).`
+              `Invalid --model format: "${options.model}". Expected provider/model (e.g. google/gemini-2.5-pro).`,
             );
             return;
           }
@@ -265,7 +259,7 @@ export function registerSessionCommands(program: Command): void {
             params.tools = JSON.parse(options.tools);
           } catch {
             printError(
-              `Invalid --tools JSON: "${options.tools}". Expected a JSON object like '{"read":true,"write":false}'.`
+              `Invalid --tools JSON: "${options.tools}". Expected a JSON object like '{"read":true,"write":false}'.`,
             );
             return;
           }
@@ -279,7 +273,9 @@ export function registerSessionCommands(program: Command): void {
         }
 
         // --- Fire the prompt ---
-        await client.session.promptAsync(params as Parameters<typeof client.session.promptAsync>[0]);
+        await client.session.promptAsync(
+          params as Parameters<typeof client.session.promptAsync>[0],
+        );
 
         console.log(JSON.stringify({ prompted: sessionId }));
       } catch (error) {
@@ -320,7 +316,7 @@ export function registerSessionCommands(program: Command): void {
     .action(async (requestId: string, answers: string[]) => {
       try {
         if (answers.length === 0) {
-          printError("No answers provided. Usage: oc-cli session answer <requestId> \"answer\"");
+          printError('No answers provided. Usage: oc-cli session answer <requestId> "answer"');
         }
         const config = getConfig(program);
         const client = getClient(config.baseUrl, config.directory);

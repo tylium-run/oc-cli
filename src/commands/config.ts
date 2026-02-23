@@ -10,7 +10,6 @@ import {
   getConfigPath,
   loadConfigFile,
   saveConfigFile,
-  resolveConfig,
   getGlobalConfigSource,
   type GlobalConfigKey,
   type CliOverrides,
@@ -18,9 +17,7 @@ import {
 import { printData, printError } from "../lib/output.js";
 
 export function registerConfigCommands(program: Command): void {
-  const config = program
-    .command("config")
-    .description("Manage oc-cli global configuration");
+  const config = program.command("config").description("Manage oc-cli global configuration");
 
   // ---- config set <key> <value> ----
   // Writes a global config key to the config file.
@@ -32,7 +29,7 @@ export function registerConfigCommands(program: Command): void {
       if (!GLOBAL_CONFIG_KEYS.includes(key as GlobalConfigKey)) {
         printError(
           `Unknown global config key: "${key}". Valid keys: ${GLOBAL_CONFIG_KEYS.join(", ")}. ` +
-          `For profile settings, use: oc-cli profile set <name> <key> <value>`,
+            `For profile settings, use: oc-cli profile set <name> <key> <value>`,
         );
         return;
       }
@@ -54,7 +51,7 @@ export function registerConfigCommands(program: Command): void {
       if (!GLOBAL_CONFIG_KEYS.includes(key as GlobalConfigKey)) {
         printError(
           `Unknown global config key: "${key}". Valid keys: ${GLOBAL_CONFIG_KEYS.join(", ")}. ` +
-          `For profile settings, use: oc-cli profile show <name>`,
+            `For profile settings, use: oc-cli profile show <name>`,
         );
         return;
       }

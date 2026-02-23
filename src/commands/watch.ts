@@ -93,12 +93,8 @@ export function registerWatchCommand(program: Command): void {
 
         if (options.pretty) {
           const mode = options.global ? "global" : "instance";
-          const sessionLabel = sessionFilter
-            ? ` (session: ${sessionFilter})`
-            : "";
-          console.log(
-            chalk.dim(`Watching ${mode} events from ${config.baseUrl}${sessionLabel}`),
-          );
+          const sessionLabel = sessionFilter ? ` (session: ${sessionFilter})` : "";
+          console.log(chalk.dim(`Watching ${mode} events from ${config.baseUrl}${sessionLabel}`));
           console.log(chalk.dim("Press Ctrl+C to stop.\n"));
         }
 
@@ -122,9 +118,7 @@ export function registerWatchCommand(program: Command): void {
 
             if (options.pretty) {
               const lines = formatEvent(event, fmtState);
-              const dirTag = ge.directory
-                ? chalk.dim(`[${ge.directory}] `)
-                : "";
+              const dirTag = ge.directory ? chalk.dim(`[${ge.directory}] `) : "";
               for (const line of lines) {
                 console.log(dirTag + line);
               }
