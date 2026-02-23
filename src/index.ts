@@ -9,6 +9,7 @@ import { registerSessionCommands } from "./commands/session.js";
 import { registerModelsCommand } from "./commands/models.js";
 import { registerConfigCommands } from "./commands/config.js";
 import { registerWatchCommand } from "./commands/watch.js";
+import { registerProfileCommands } from "./commands/profile.js";
 
 const program = new Command();
 
@@ -19,15 +20,16 @@ program
 
 // ---- Global options ----
 // These are available on EVERY command. Commander places them on program.opts().
-// They override config file and env var values (highest priority).
 program
+  .option("-p, --profile <name>", "Select a configuration profile")
   .option("--base-url <url>", "Override the OpenCode server URL")
-  .option("--title-prefix <prefix>", "Override the session title prefix");
+  .option("--title-prefix <prefix>", "Override the global title prefix");
 
 // Register all command groups.
 registerSessionCommands(program);
 registerModelsCommand(program);
 registerConfigCommands(program);
 registerWatchCommand(program);
+registerProfileCommands(program);
 
 program.parse();

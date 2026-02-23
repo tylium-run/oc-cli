@@ -7,7 +7,7 @@
 import { Command } from "commander";
 import { readFile } from "node:fs/promises";
 import { getClient } from "../lib/client.js";
-import { resolveConfig, type Config } from "../lib/config.js";
+import { resolveConfig, type Config, type CliOverrides } from "../lib/config.js";
 import { printData, printError } from "../lib/output.js";
 
 /**
@@ -33,13 +33,15 @@ function collect(value: string, previous: string[]): string[] {
 
 /**
  * Read global options from the root program and resolve config.
+ * Passes the -p/--profile flag through to profile-based resolution.
  */
 function getConfig(program: Command): Config {
   const globalOpts = program.opts();
-  const cliFlags: Partial<Config> = {};
-  if (globalOpts.baseUrl) cliFlags.baseUrl = globalOpts.baseUrl;
-  if (globalOpts.titlePrefix) cliFlags.titlePrefix = globalOpts.titlePrefix;
-  return resolveConfig(cliFlags);
+  const overrides: CliOverrides = {};
+  if (globalOpts.baseUrl) overrides.baseUrl = globalOpts.baseUrl;
+  if (globalOpts.titlePrefix) overrides.titlePrefix = globalOpts.titlePrefix;
+  if (globalOpts.profile) overrides.profile = globalOpts.profile;
+  return resolveConfig(overrides);
 }
 
 export function registerSessionCommands(program: Command): void {
@@ -58,7 +60,7 @@ export function registerSessionCommands(program: Command): void {
     .action(async (options) => {
       try {
         const config = getConfig(program);
-        const client = getClient(config.baseUrl);
+        const client = getClient(config.baseUrl, config.directory);
         const result = await client.session.list();
 
         let data = result.data as unknown as Record<string, unknown>[];
@@ -96,7 +98,7 @@ export function registerSessionCommands(program: Command): void {
     .action(async (options) => {
       try {
         const config = getConfig(program);
-        const client = getClient(config.baseUrl);
+        const client = getClient(config.baseUrl, config.directory);
 
         // Auto-prepend titlePrefix to the title if both exist.
         let title = options.title;
@@ -132,7 +134,7 @@ export function registerSessionCommands(program: Command): void {
     .action(async (id: string) => {
       try {
         const config = getConfig(program);
-        const client = getClient(config.baseUrl);
+        const client = getClient(config.baseUrl, config.directory);
 
         await client.session.delete({ sessionID: id });
         console.log(JSON.stringify({ deleted: id }));
@@ -151,7 +153,7 @@ export function registerSessionCommands(program: Command): void {
     .action(async (id: string, options) => {
       try {
         const config = getConfig(program);
-        const client = getClient(config.baseUrl);
+        const client = getClient(config.baseUrl, config.directory);
 
         const result = await client.session.messages({ sessionID: id });
 
@@ -228,7 +230,7 @@ export function registerSessionCommands(program: Command): void {
 
         // --- Parse optional flags ---
         const config = getConfig(program);
-        const client = getClient(config.baseUrl);
+        const client = getClient(config.baseUrl, config.directory);
 
         // Build the promptAsync parameters.
         const params: Record<string, unknown> = {
@@ -251,8 +253,11 @@ export function registerSessionCommands(program: Command): void {
           };
         }
 
+        // --agent flag overrides profile's defaultAgent.
         if (options.agent) {
           params.agent = options.agent;
+        } else if (config.defaultAgent) {
+          params.agent = config.defaultAgent;
         }
 
         if (options.tools) {
@@ -294,7 +299,7 @@ export function registerSessionCommands(program: Command): void {
           printError(`Invalid reply: "${reply}". Must be once, always, or reject.`);
         }
         const config = getConfig(program);
-        const client = getClient(config.baseUrl);
+        const client = getClient(config.baseUrl, config.directory);
 
         await client.permission.reply({
           requestID: requestId,
@@ -318,7 +323,7 @@ export function registerSessionCommands(program: Command): void {
           printError("No answers provided. Usage: oc-cli session answer <requestId> \"answer\"");
         }
         const config = getConfig(program);
-        const client = getClient(config.baseUrl);
+        const client = getClient(config.baseUrl, config.directory);
 
         // Each answer is an array of selected labels (for multi-select).
         // For single-select, it's a one-element array per question.
@@ -340,7 +345,7 @@ export function registerSessionCommands(program: Command): void {
     .action(async (requestId: string) => {
       try {
         const config = getConfig(program);
-        const client = getClient(config.baseUrl);
+        const client = getClient(config.baseUrl, config.directory);
 
         await client.question.reject({ requestID: requestId });
         console.log(JSON.stringify({ rejected: requestId }));

@@ -19,7 +19,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { getClient } from "../lib/client.js";
-import { resolveConfig, type Config } from "../lib/config.js";
+import { resolveConfig, type CliOverrides } from "../lib/config.js";
 import { printError } from "../lib/output.js";
 import { formatEvent, createFormatterState } from "../lib/format-event.js";
 
@@ -37,12 +37,13 @@ export function registerWatchCommand(program: Command): void {
     )
     .action(async (options) => {
       try {
-        // Resolve config for base URL.
+        // Resolve config for base URL and directory.
         const globalOpts = program.opts();
-        const cliFlags: Partial<Config> = {};
-        if (globalOpts.baseUrl) cliFlags.baseUrl = globalOpts.baseUrl;
-        const config = resolveConfig(cliFlags);
-        const client = getClient(config.baseUrl);
+        const overrides: CliOverrides = {};
+        if (globalOpts.baseUrl) overrides.baseUrl = globalOpts.baseUrl;
+        if (globalOpts.profile) overrides.profile = globalOpts.profile;
+        const config = resolveConfig(overrides);
+        const client = getClient(config.baseUrl, config.directory);
 
         // Parse --type filter if provided.
         const typeFilter = options.type

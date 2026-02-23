@@ -5,7 +5,7 @@
 
 import { Command } from "commander";
 import { getClient } from "../lib/client.js";
-import { resolveConfig, type Config } from "../lib/config.js";
+import { resolveConfig, type CliOverrides } from "../lib/config.js";
 import { printData, printError } from "../lib/output.js";
 
 // Helper for Commander to allow repeatable flags.
@@ -24,10 +24,11 @@ export function registerModelsCommand(program: Command): void {
     .action(async (options) => {
       try {
         const globalOpts = program.opts();
-        const cliFlags: Partial<Config> = {};
-        if (globalOpts.baseUrl) cliFlags.baseUrl = globalOpts.baseUrl;
-        const config = resolveConfig(cliFlags);
-        const client = getClient(config.baseUrl);
+        const overrides: CliOverrides = {};
+        if (globalOpts.baseUrl) overrides.baseUrl = globalOpts.baseUrl;
+        if (globalOpts.profile) overrides.profile = globalOpts.profile;
+        const config = resolveConfig(overrides);
+        const client = getClient(config.baseUrl, config.directory);
 
         const rows: Record<string, unknown>[] = [];
 

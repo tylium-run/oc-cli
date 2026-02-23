@@ -1,22 +1,32 @@
 // Config management for oc-cli.
 //
-// Config is resolved by merging multiple layers, highest priority first:
+// Config is profile-based. Every operation requires a profile that specifies
+// at minimum a baseUrl. The config file lives at ~/.oc-cli.json.
+//
+// Config file structure:
+//   {
+//     "titlePrefix": "[bishop]",          ← global, shared across all profiles
+//     "profiles": {
+//       "my-project": {
+//         "baseUrl": "https://...",        ← required
+//         "directory": "/path/to/project", ← optional, sets x-opencode-directory header
+//         "defaultAgent": "coder",         ← optional, default --agent for prompt
+//         "description": "My project",     ← optional, for display
+//         "tags": ["tag1", "tag2"]         ← optional, for filtering
+//       }
+//     }
+//   }
+//
+// Resolution priority (highest to lowest):
 //   1. CLI flags (--base-url, --title-prefix)
 //   2. Environment variables (OC_BASE_URL, OC_TITLE_PREFIX)
-//   3. Config file (~/.oc-cli.json)
+//   3. Profile values (from the selected profile)
 //   4. Hardcoded defaults
 //
-// HOW IT WORKS:
-// - `resolveConfig(cliFlags)` is the main entry point. It reads all layers
-//   and merges them. The result is a simple object with final values.
-// - `loadConfigFile()` / `saveConfigFile()` handle the JSON file on disk.
-// - The config file is only created when the user runs `config set`.
-//
-// NODE CONCEPTS USED:
-// - `os.homedir()` — returns the user's home directory (e.g. /Users/aakash)
-// - `fs.readFileSync` / `fs.writeFileSync` — read/write files synchronously
-//   (sync is fine here because config is loaded once at startup, not in a loop)
-// - `process.env` — object containing all environment variables
+// Profile selection:
+//   - Explicit: -p <name> / --profile <name>
+//   - Implicit: if exactly 1 profile exists, auto-select it
+//   - Error: if 0 profiles or 2+ profiles without -p
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -24,21 +34,42 @@ import { join } from "node:path";
 
 // ---- Types ----
 
-/** The shape of our config. Every key here is a valid config setting. */
-export interface Config {
+/** A single profile stored in the config file. */
+export interface Profile {
   baseUrl: string;
-  titlePrefix: string;
+  directory?: string;
+  defaultAgent?: string;
+  description?: string;
+  tags?: string[];
 }
 
-/** The valid config keys — used to validate `config set <key>`. */
-export const CONFIG_KEYS: (keyof Config)[] = ["baseUrl", "titlePrefix"];
+/** Valid keys that can be set on a profile via `profile set`. */
+export const PROFILE_KEYS: (keyof Profile)[] = [
+  "baseUrl",
+  "directory",
+  "defaultAgent",
+  "description",
+  "tags",
+];
 
-// ---- Defaults ----
+/** The shape of the config file on disk. */
+export interface ConfigFile {
+  titlePrefix?: string;
+  profiles?: Record<string, Profile>;
+}
 
-const DEFAULTS: Config = {
-  baseUrl: "https://devs-mac-mini.taild2246a.ts.net:4096",
-  titlePrefix: "",
-};
+/** Global config keys (top-level, not per-profile). */
+export const GLOBAL_CONFIG_KEYS = ["titlePrefix"] as const;
+export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number];
+
+/** The fully resolved config used at runtime. */
+export interface Config {
+  baseUrl: string;
+  directory?: string;
+  defaultAgent?: string;
+  titlePrefix: string;
+  activeProfile: string;
+}
 
 // ---- Config file path ----
 
@@ -52,16 +83,15 @@ export function getConfigPath(): string {
 /**
  * Load the config file from disk.
  * Returns an empty object if the file doesn't exist yet.
- * Returns a partial Config — only the keys the user has set.
  */
-export function loadConfigFile(): Partial<Config> {
+export function loadConfigFile(): ConfigFile {
   const configPath = getConfigPath();
   if (!existsSync(configPath)) {
     return {};
   }
   try {
     const raw = readFileSync(configPath, "utf-8");
-    return JSON.parse(raw) as Partial<Config>;
+    return JSON.parse(raw) as ConfigFile;
   } catch {
     // If the file is corrupt/unreadable, treat it as empty.
     return {};
@@ -71,79 +101,158 @@ export function loadConfigFile(): Partial<Config> {
 /**
  * Save config to the config file on disk.
  * Overwrites the entire file with the given object.
- * The file is written with 2-space indentation for readability.
  */
-export function saveConfigFile(config: Partial<Config>): void {
+export function saveConfigFile(config: ConfigFile): void {
   const configPath = getConfigPath();
   writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
 }
 
+// ---- Profile helpers ----
+
+/**
+ * Get all profiles from the config file.
+ * Returns an empty object if no profiles are defined.
+ */
+export function getProfiles(): Record<string, Profile> {
+  const file = loadConfigFile();
+  return file.profiles ?? {};
+}
+
+/**
+ * Get a single profile by name. Returns undefined if not found.
+ */
+export function getProfile(name: string): Profile | undefined {
+  return getProfiles()[name];
+}
+
+/**
+ * Save a profile to the config file (add or update).
+ */
+export function saveProfile(name: string, profile: Profile): void {
+  const file = loadConfigFile();
+  if (!file.profiles) file.profiles = {};
+  file.profiles[name] = profile;
+  saveConfigFile(file);
+}
+
+/**
+ * Remove a profile from the config file. Returns true if it existed.
+ */
+export function removeProfile(name: string): boolean {
+  const file = loadConfigFile();
+  if (!file.profiles || !(name in file.profiles)) return false;
+  delete file.profiles[name];
+  saveConfigFile(file);
+  return true;
+}
+
 // ---- Config resolution ----
 
-/**
- * Maps environment variable names to config keys.
- * When the user sets OC_BASE_URL=..., it maps to config.baseUrl.
- */
-const ENV_MAP: Record<string, keyof Config> = {
-  OC_BASE_URL: "baseUrl",
-  OC_TITLE_PREFIX: "titlePrefix",
-};
+/** CLI flags that can override config values. */
+export interface CliOverrides {
+  baseUrl?: string;
+  titlePrefix?: string;
+  profile?: string;
+}
 
 /**
- * Resolve the final config by merging all layers.
+ * Resolve the final config by selecting a profile and merging overrides.
  *
- * Priority (highest to lowest):
- *   1. cliFlags  — from Commander's global options (--base-url, --title-prefix)
- *   2. env vars  — OC_BASE_URL, OC_TITLE_PREFIX
- *   3. config file — ~/.oc-cli.json
- *   4. defaults  — hardcoded above
+ * Profile selection:
+ *   1. Explicit profileName (from -p flag)
+ *   2. Implicit: if exactly 1 profile exists, use it
+ *   3. Error: if 0 profiles or 2+ profiles without -p
  *
- * @param cliFlags - Partial config from CLI flags. Only includes keys
- *                   the user actually passed on the command line.
+ * Value resolution priority (highest to lowest):
+ *   1. CLI flags (--base-url, --title-prefix)
+ *   2. Environment variables (OC_BASE_URL, OC_TITLE_PREFIX)
+ *   3. Profile values
+ *   4. Hardcoded defaults
+ *
+ * Title prefix is computed as: globalTitlePrefix + "[profileName] "
  */
-export function resolveConfig(cliFlags: Partial<Config> = {}): Config {
-  // Layer 3: config file
-  const fileConfig = loadConfigFile();
+export function resolveConfig(overrides: CliOverrides = {}): Config {
+  const file = loadConfigFile();
+  const profiles = file.profiles ?? {};
+  const profileNames = Object.keys(profiles);
 
-  // Layer 2: environment variables
-  const envConfig: Partial<Config> = {};
-  for (const [envVar, configKey] of Object.entries(ENV_MAP)) {
-    const value = process.env[envVar];
-    if (value !== undefined) {
-      envConfig[configKey] = value;
+  // ---- Determine active profile ----
+  let activeProfileName: string;
+  let activeProfile: Profile;
+
+  if (overrides.profile) {
+    // Explicit -p flag
+    activeProfileName = overrides.profile;
+    const found = profiles[activeProfileName];
+    if (!found) {
+      const available = profileNames.length > 0
+        ? ` Available: ${profileNames.join(", ")}`
+        : " No profiles configured.";
+      throw new Error(
+        `Profile "${activeProfileName}" not found.${available} ` +
+        `Run \`oc-cli profile add <name>\` to create one.`,
+      );
     }
+    activeProfile = found;
+  } else if (profileNames.length === 1) {
+    // Implicit: exactly one profile
+    activeProfileName = profileNames[0];
+    activeProfile = profiles[activeProfileName];
+  } else if (profileNames.length === 0) {
+    throw new Error(
+      "No profiles configured. Run `oc-cli profile add <name>` to create one.",
+    );
+  } else {
+    throw new Error(
+      `Multiple profiles configured: ${profileNames.join(", ")}. ` +
+      `Use -p <name> to select one.`,
+    );
   }
 
-  // Merge: defaults ← file ← env ← cli flags
-  // The spread operator overwrites left-to-right, so later layers win.
+  // ---- Resolve baseUrl ----
+  // Priority: CLI flag > env var > profile value
+  const baseUrl =
+    overrides.baseUrl ??
+    process.env.OC_BASE_URL ??
+    activeProfile.baseUrl;
+
+  // ---- Resolve titlePrefix ----
+  // Priority: CLI flag > env var > config file global
+  const globalPrefix =
+    overrides.titlePrefix ??
+    process.env.OC_TITLE_PREFIX ??
+    file.titlePrefix ??
+    "";
+
+  // Auto-append [profileName] to the global prefix.
+  // "[bishop]" + "safegold-react" → "[bishop][safegold-react] "
+  // "" + "safegold-react" → "[safegold-react] "
+  const titlePrefix = globalPrefix
+    ? `${globalPrefix}[${activeProfileName}] `
+    : `[${activeProfileName}] `;
+
   return {
-    ...DEFAULTS,
-    ...fileConfig,
-    ...envConfig,
-    ...cliFlags,
+    baseUrl,
+    directory: activeProfile.directory,
+    defaultAgent: activeProfile.defaultAgent,
+    titlePrefix,
+    activeProfile: activeProfileName,
   };
 }
 
 /**
- * Get the source of a config value (for `config get --pretty`).
- * Checks each layer from highest to lowest priority and returns
- * the name of the first layer that has a value for the given key.
+ * Get the source of a global config value (for `config get`).
  */
-export function getConfigSource(
-  key: keyof Config,
-  cliFlags: Partial<Config> = {},
+export function getGlobalConfigSource(
+  key: GlobalConfigKey,
+  cliOverrides: CliOverrides = {},
 ): string {
-  // Check CLI flags first (highest priority)
-  if (cliFlags[key] !== undefined) return "cli flag";
-
-  // Check environment variables
-  const envEntry = Object.entries(ENV_MAP).find(([, k]) => k === key);
-  if (envEntry && process.env[envEntry[0]] !== undefined) return `env (${envEntry[0]})`;
-
-  // Check config file
-  const fileConfig = loadConfigFile();
-  if (fileConfig[key] !== undefined) return "config file";
-
-  // Must be the default
+  if (key === "titlePrefix") {
+    if (cliOverrides.titlePrefix !== undefined) return "cli flag";
+    if (process.env.OC_TITLE_PREFIX !== undefined) return "env (OC_TITLE_PREFIX)";
+    const file = loadConfigFile();
+    if (file.titlePrefix !== undefined) return "config file";
+    return "default";
+  }
   return "default";
 }
