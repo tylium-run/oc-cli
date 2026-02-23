@@ -177,10 +177,11 @@ function printTable(
         raw.length > c.width ? raw.slice(0, c.width - 3) + "..." : raw.padEnd(c.width);
 
       // Apply different colors based on the column key.
-      // "id" fields are dim (long and noisy), "title" is white, rest is default.
       if (c.key === "id") return chalk.dim(truncated);
-      if (c.key === "title") return chalk.white(truncated);
+      if (c.key === "title" || c.key === "name") return chalk.white(truncated);
       if (c.key === "slug") return chalk.green(truncated);
+      if (c.key === "provider") return chalk.cyan(truncated);
+      if (c.key === "default" && raw === "yes") return chalk.green.bold(truncated);
       return truncated;
     });
     console.log(cells.join("  "));
@@ -188,5 +189,5 @@ function printTable(
 
   // Print a summary footer.
   console.log();
-  console.log(chalk.dim(`${data.length} session${data.length === 1 ? "" : "s"}`));
+  console.log(chalk.dim(`${data.length} result${data.length === 1 ? "" : "s"}`));
 }
