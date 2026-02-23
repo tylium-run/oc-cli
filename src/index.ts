@@ -8,6 +8,7 @@ import { Command } from "commander";
 import { registerSessionCommands } from "./commands/session.js";
 import { registerModelsCommand } from "./commands/models.js";
 import { registerConfigCommands } from "./commands/config.js";
+import { registerWatchCommand } from "./commands/watch.js";
 
 const program = new Command();
 
@@ -27,5 +28,6 @@ program
 registerSessionCommands(program);
 registerModelsCommand(program);
 registerConfigCommands(program);
+registerWatchCommand(program);
 
 program.parse();
