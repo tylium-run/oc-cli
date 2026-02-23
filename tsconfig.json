@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    /* What JS version to output */
+    "target": "ES2022",
+
+    /* Module system — Node16 works with "type": "module" in package.json */
+    "module": "Node16",
+    "moduleResolution": "Node16",
+
+    /* Where to put compiled .js files */
+    "outDir": "dist",
+
+    /* Where your source .ts files live */
+    "rootDir": "src",
+
+    /* Enable strict type checking — catches more bugs */
+    "strict": true,
+
+    /* Generate .d.ts type declaration files (useful if others import your package) */
+    "declaration": true,
+
+    /* Remove comments from compiled output to keep it small */
+    "removeComments": true,
+
+    /* Skip type-checking node_modules for faster builds */
+    "skipLibCheck": true,
+
+    /* Allow importing .json files */
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
