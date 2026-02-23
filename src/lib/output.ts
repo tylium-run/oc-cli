@@ -24,6 +24,7 @@ import chalk from "chalk";
 export interface OutputOptions {
   pretty?: boolean;
   fields?: string;
+  filter?: string[];
 }
 
 // ---- Data output ----
@@ -41,10 +42,15 @@ export function printData(
   options: OutputOptions,
   columns: { key: string; label: string; width: number }[],
 ): void {
-  // Step 1: If --fields is set, filter each object to only those keys.
-  const filtered = options.fields ? filterFields(data, options.fields) : data;
+  // Step 1: If --filter is set, narrow down to matching rows.
+  // --filter can be repeated: --filter slug=brave --filter title=Linear
+  // All filters must match (AND logic).
+  const matched = options.filter ? filterData(data, options.filter) : data;
 
-  // Step 2: Pick the output format.
+  // Step 2: If --fields is set, filter each object to only those keys.
+  const filtered = options.fields ? filterFields(matched, options.fields) : matched;
+
+  // Step 3: Pick the output format.
   if (options.pretty) {
     printTable(filtered, columns);
   } else {
@@ -67,6 +73,59 @@ export function printError(message: string): never {
 }
 
 // ---- Internal helpers ----
+
+/**
+ * Filter rows where all key=value conditions match (case-insensitive contains).
+ *
+ * Examples:
+ *   --filter slug=brave          → rows where slug contains "brave"
+ *   --filter slug=brave --filter title=Linear  → both must match (AND)
+ *
+ * Supports dot notation for nested fields:
+ *   --filter summary.files=0     → rows where summary.files contains "0"
+ */
+function filterData(
+  data: Record<string, unknown>[],
+  filters: string[],
+): Record<string, unknown>[] {
+  // Parse each "key=value" string into a { key, value } pair.
+  const conditions = filters.map((f) => {
+    const eqIndex = f.indexOf("=");
+    if (eqIndex === -1) {
+      printError(`Invalid filter format: "${f}". Expected key=value`);
+    }
+    return {
+      key: f.slice(0, eqIndex).trim(),
+      value: f.slice(eqIndex + 1).trim().toLowerCase(),
+    };
+  });
+
+  return data.filter((item) =>
+    conditions.every(({ key, value }) => {
+      // Resolve dot notation: "summary.files" → item.summary.files
+      const resolved = resolveDotPath(item, key);
+      if (resolved === undefined) return false;
+      return String(resolved).toLowerCase().includes(value);
+    }),
+  );
+}
+
+/**
+ * Resolve a dot-separated path on an object.
+ * resolveDotPath({a: {b: 1}}, "a.b") → 1
+ * resolveDotPath({a: 1}, "a.b") → undefined
+ */
+function resolveDotPath(obj: Record<string, unknown>, path: string): unknown {
+  const parts = path.split(".");
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (current === null || current === undefined || typeof current !== "object") {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
 
 /**
  * Filter each object to only include the specified comma-separated fields.

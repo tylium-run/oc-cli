@@ -11,6 +11,14 @@ import { Command } from "commander";
 import { client } from "./lib/client.js";
 import { printData, printError } from "./lib/output.js";
 
+// Helper for Commander to allow repeatable flags.
+// When you use --filter multiple times, Commander calls this function
+// for each one. It accumulates them into an array.
+//   --filter slug=brave --filter title=Linear → ["slug=brave", "title=Linear"]
+function collect(value: string, previous: string[]): string[] {
+  return previous.concat([value]);
+}
+
 // Create the top-level program.
 // Think of this as the root of your CLI — all commands hang off it.
 const program = new Command();
@@ -50,6 +58,7 @@ program
   .description("List all OpenCode sessions")
   .option("--pretty", "Output as a human-readable table")
   .option("--fields <fields>", "Comma-separated list of fields to include")
+  .option("--filter <key=value>", "Filter rows (contains match, repeatable)", collect, [])
   .action(async (options) => {
     try {
       const result = await client.session.list();
