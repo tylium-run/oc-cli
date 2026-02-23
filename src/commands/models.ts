@@ -23,7 +23,6 @@ export function registerModelsCommand(program: Command): void {
     .option("--filter <key=value>", "Filter rows (contains match, repeatable)", collect, [])
     .action(async (options) => {
       try {
-        // Resolve config to get the base URL.
         const globalOpts = program.opts();
         const cliFlags: Partial<Config> = {};
         if (globalOpts.baseUrl) cliFlags.baseUrl = globalOpts.baseUrl;
@@ -33,7 +32,6 @@ export function registerModelsCommand(program: Command): void {
         const rows: Record<string, unknown>[] = [];
 
         if (options.all) {
-          // Show every provider/model on the server.
           const result = await client.provider.list();
           const providers = result.data?.all ?? [];
 
@@ -47,7 +45,6 @@ export function registerModelsCommand(program: Command): void {
             }
           }
         } else {
-          // Show only enabled/configured providers and their models.
           const result = await client.config.providers();
           const providers = result.data?.providers ?? [];
           const defaults = (result.data?.default ?? {}) as Record<string, string>;

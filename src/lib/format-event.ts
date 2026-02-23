@@ -392,6 +392,22 @@ export function formatEvent(
     // ================================================================
     // PERMISSIONS
     // ================================================================
+    case "permission.asked": {
+      const permission = props.permission as string;
+      const patterns = (props.patterns ?? []) as string[];
+      const requestId = props.id as string;
+
+      endStreaming(state);
+      lines.push("");
+      lines.push(`${chalk.yellow.bold("Permission required:")} ${chalk.white(permission)}`);
+      for (const pattern of patterns) {
+        lines.push(`  ${chalk.dim(pattern)}`);
+      }
+      lines.push(chalk.dim(`  oc-cli session permit ${requestId} [once|always|reject]`));
+      lines.push("");
+      break;
+    }
+
     case "permission.updated": {
       const title = props.title as string;
       endStreaming(state);
@@ -400,8 +416,55 @@ export function formatEvent(
     }
 
     case "permission.replied": {
-      const response = props.response as string;
-      lines.push(`${chalk.green("Approved")} ${chalk.dim(response)}`);
+      const reply = (props.reply ?? props.response ?? "") as string;
+      const label = reply === "reject" ? chalk.red("Rejected") : chalk.green(`Permitted (${reply})`);
+      lines.push(label);
+      break;
+    }
+
+    // ================================================================
+    // QUESTIONS
+    // ================================================================
+    case "question.asked": {
+      const questions = (props.questions ?? []) as Record<string, unknown>[];
+      const requestId = props.id as string;
+
+      endStreaming(state);
+      lines.push("");
+      for (const q of questions) {
+        const question = q.question as string;
+        const header = q.header as string;
+        const qOptions = (q.options ?? []) as Record<string, unknown>[];
+        const multiple = q.multiple as boolean;
+
+        lines.push(`${chalk.yellow.bold("Question:")} ${chalk.white(question)}`);
+        if (header) lines.push(`  ${chalk.dim(header)}`);
+
+        for (let i = 0; i < qOptions.length; i++) {
+          const opt = qOptions[i];
+          const label = opt.label as string;
+          const desc = opt.description as string;
+          lines.push(`  ${chalk.cyan(`${i + 1}.`)} ${chalk.white(label)}${desc ? chalk.dim(` — ${desc}`) : ""}`);
+        }
+
+        if (multiple) {
+          lines.push(chalk.dim("  (multiple selections allowed)"));
+        }
+      }
+      lines.push(chalk.dim(`  oc-cli session answer ${requestId} "your answer"`));
+      lines.push(chalk.dim(`  oc-cli session reject ${requestId}`));
+      lines.push("");
+      break;
+    }
+
+    case "question.replied": {
+      const answers = (props.answers ?? []) as string[][];
+      lines.push(`${chalk.green("Answered:")} ${chalk.dim(JSON.stringify(answers))}`);
+      break;
+    }
+
+    case "question.rejected": {
+      lines.push(chalk.red("Question rejected"));
       break;
     }
 

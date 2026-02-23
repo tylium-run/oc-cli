@@ -1,16 +1,30 @@
-// Session commands: list, create, delete, messages
+// Session commands: list, create, delete, messages, prompt
 //
-// This file defines all `oc-cli session <subcommand>` commands.
-// It exports a function that takes the top-level Commander program
-// and registers the "session" command group on it.
-//
-// CHANGE: Now uses resolveConfig() + getClient() so the base URL and
-// title prefix come from the layered config system instead of being hardcoded.
+// Uses the v2 SDK which has a simpler parameter style:
+//   v1: client.session.create({ body: { title }, query: { directory } })
+//   v2: client.session.create({ title, directory })
 
 import { Command } from "commander";
+import { readFile } from "node:fs/promises";
 import { getClient } from "../lib/client.js";
 import { resolveConfig, type Config } from "../lib/config.js";
 import { printData, printError } from "../lib/output.js";
+
+/**
+ * Read all of stdin into a string.
+ *
+ * Returns a promise that resolves once the stdin stream ends.
+ * If stdin is a TTY (no piped input), this would hang forever,
+ * so the caller should only invoke this when --stdin is set.
+ */
+function readStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    process.stdin.on("data", (chunk: Buffer) => chunks.push(chunk));
+    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    process.stdin.on("error", reject);
+  });
+}
 
 // Helper for Commander to allow repeatable flags.
 function collect(value: string, previous: string[]): string[] {
@@ -19,8 +33,6 @@ function collect(value: string, previous: string[]): string[] {
 
 /**
  * Read global options from the root program and resolve config.
- * This is called at the start of every command action so we always
- * have the merged config (defaults ← file ← env ← CLI flags).
  */
 function getConfig(program: Command): Config {
   const globalOpts = program.opts();
@@ -31,8 +43,6 @@ function getConfig(program: Command): Config {
 }
 
 export function registerSessionCommands(program: Command): void {
-  // Create a "session" command group.
-  // This means all subcommands will be: oc-cli session list, oc-cli session create, etc.
   const session = program
     .command("session")
     .description("Manage OpenCode sessions");
@@ -53,8 +63,6 @@ export function registerSessionCommands(program: Command): void {
 
         let data = result.data as unknown as Record<string, unknown>[];
 
-        // --mine: filter to sessions whose title starts with the configured prefix.
-        // Only applies if a titlePrefix is actually set.
         if (options.mine) {
           if (!config.titlePrefix) {
             printError("Cannot use --mine: no titlePrefix is configured. Set one with: oc-cli config set titlePrefix \"[prefix] \"");
@@ -91,22 +99,18 @@ export function registerSessionCommands(program: Command): void {
         const client = getClient(config.baseUrl);
 
         // Auto-prepend titlePrefix to the title if both exist.
-        // If no --title is given but a prefix is set, use the prefix alone.
         let title = options.title;
         if (config.titlePrefix) {
           title = title
             ? config.titlePrefix + title
-            : config.titlePrefix.trimEnd(); // trim trailing space if no title follows
+            : config.titlePrefix.trimEnd();
         }
 
         const result = await client.session.create({
-          body: {
-            ...(title && { title }),
-          },
-          ...(options.directory && { query: { directory: options.directory } }),
+          ...(title && { title }),
+          ...(options.directory && { directory: options.directory }),
         });
 
-        // Print the created session. Wrap in array for consistent output.
         const sessionData = result.data as unknown as Record<string, unknown>;
 
         const columns = [
@@ -130,10 +134,7 @@ export function registerSessionCommands(program: Command): void {
         const config = getConfig(program);
         const client = getClient(config.baseUrl);
 
-        await client.session.delete({
-          path: { id },
-        });
-        // Output success as JSON for consistency.
+        await client.session.delete({ sessionID: id });
         console.log(JSON.stringify({ deleted: id }));
       } catch (error) {
         printError(error instanceof Error ? error.message : "Unknown error");
@@ -152,9 +153,7 @@ export function registerSessionCommands(program: Command): void {
         const config = getConfig(program);
         const client = getClient(config.baseUrl);
 
-        const result = await client.session.messages({
-          path: { id },
-        });
+        const result = await client.session.messages({ sessionID: id });
 
         const columns = [
           { key: "role", label: "ROLE", width: 12 },
@@ -166,6 +165,185 @@ export function registerSessionCommands(program: Command): void {
           options,
           columns,
         );
+      } catch (error) {
+        printError(error instanceof Error ? error.message : "Unknown error");
+      }
+    });
+
+  // ---- session prompt ----
+  // Send a message to a session. Fire-and-forget: the response streams via SSE
+  // events, so the user should run `oc-cli watch -s <id>` to see output.
+  //
+  // Input sources (exactly one required):
+  //   1. Inline text argument:  oc-cli session prompt <id> "message"
+  //   2. --file <path>:         reads text from a file
+  //   3. --stdin:               reads text from piped stdin
+  session
+    .command("prompt <sessionId> [message]")
+    .description("Send a prompt message to a session")
+    .option("-f, --file <path>", "Read the prompt text from a file")
+    .option("--stdin", "Read the prompt text from stdin")
+    .option("-m, --model <provider/model>", "Override the LLM model (e.g. google/gemini-2.5-pro)")
+    .option("--agent <name>", "Specify which agent handles the prompt")
+    .option("--tools <json>", "JSON map of tool name to enabled boolean")
+    .option("--no-reply", "Send the message without triggering an agent response")
+    .action(async (sessionId: string, message: string | undefined, options) => {
+      try {
+        // --- Resolve input text from exactly one source ---
+        const sources = [
+          message !== undefined,
+          Boolean(options.file),
+          Boolean(options.stdin),
+        ].filter(Boolean).length;
+
+        if (sources === 0) {
+          printError(
+            "No message provided. Provide inline text, --file <path>, or --stdin.\n" +
+            "Usage: oc-cli session prompt <sessionId> \"message\""
+          );
+          return;
+        }
+        if (sources > 1) {
+          printError(
+            "Multiple message sources provided. Use only one of: inline text, --file, or --stdin."
+          );
+          return;
+        }
+
+        let text: string;
+        if (options.file) {
+          text = await readFile(options.file, "utf-8");
+        } else if (options.stdin) {
+          text = await readStdin();
+        } else {
+          text = message!;
+        }
+
+        // Trim and validate — don't send empty prompts.
+        text = text.trim();
+        if (text.length === 0) {
+          printError("Message is empty after trimming whitespace.");
+          return;
+        }
+
+        // --- Parse optional flags ---
+        const config = getConfig(program);
+        const client = getClient(config.baseUrl);
+
+        // Build the promptAsync parameters.
+        const params: Record<string, unknown> = {
+          sessionID: sessionId,
+          parts: [{ type: "text", text }],
+        };
+
+        // --model google/gemini-2.5-pro → { providerID: "google", modelID: "gemini-2.5-pro" }
+        if (options.model) {
+          const slashIndex = options.model.indexOf("/");
+          if (slashIndex === -1) {
+            printError(
+              `Invalid --model format: "${options.model}". Expected provider/model (e.g. google/gemini-2.5-pro).`
+            );
+            return;
+          }
+          params.model = {
+            providerID: options.model.slice(0, slashIndex),
+            modelID: options.model.slice(slashIndex + 1),
+          };
+        }
+
+        if (options.agent) {
+          params.agent = options.agent;
+        }
+
+        if (options.tools) {
+          try {
+            params.tools = JSON.parse(options.tools);
+          } catch {
+            printError(
+              `Invalid --tools JSON: "${options.tools}". Expected a JSON object like '{"read":true,"write":false}'.`
+            );
+            return;
+          }
+        }
+
+        // Commander's --no-reply convention: when you define --no-reply,
+        // Commander sets options.reply = false (it strips the "no-" prefix
+        // and inverts the boolean). So we check options.reply === false.
+        if (options.reply === false) {
+          params.noReply = true;
+        }
+
+        // --- Fire the prompt ---
+        await client.session.promptAsync(params as Parameters<typeof client.session.promptAsync>[0]);
+
+        console.log(JSON.stringify({ prompted: sessionId }));
+      } catch (error) {
+        printError(error instanceof Error ? error.message : "Unknown error");
+      }
+    });
+
+  // ---- session permit ----
+  // Respond to a permission request (e.g. "can I access this directory?")
+  session
+    .command("permit <requestId>")
+    .description("Respond to a permission request (once, always, or reject)")
+    .argument("[reply]", "Response: once, always, or reject", "once")
+    .action(async (requestId: string, reply: string) => {
+      try {
+        if (!["once", "always", "reject"].includes(reply)) {
+          printError(`Invalid reply: "${reply}". Must be once, always, or reject.`);
+        }
+        const config = getConfig(program);
+        const client = getClient(config.baseUrl);
+
+        await client.permission.reply({
+          requestID: requestId,
+          reply: reply as "once" | "always" | "reject",
+        });
+        console.log(JSON.stringify({ permitted: requestId, reply }));
+      } catch (error) {
+        printError(error instanceof Error ? error.message : "Unknown error");
+      }
+    });
+
+  // ---- session answer ----
+  // Respond to a question from the agent.
+  // Usage: oc-cli session answer <requestId> "answer1" "answer2"
+  session
+    .command("answer <requestId> [answers...]")
+    .description("Answer a question from the agent")
+    .action(async (requestId: string, answers: string[]) => {
+      try {
+        if (answers.length === 0) {
+          printError("No answers provided. Usage: oc-cli session answer <requestId> \"answer\"");
+        }
+        const config = getConfig(program);
+        const client = getClient(config.baseUrl);
+
+        // Each answer is an array of selected labels (for multi-select).
+        // For single-select, it's a one-element array per question.
+        await client.question.reply({
+          requestID: requestId,
+          answers: answers.map((a) => [a]),
+        });
+        console.log(JSON.stringify({ answered: requestId, answers }));
+      } catch (error) {
+        printError(error instanceof Error ? error.message : "Unknown error");
+      }
+    });
+
+  // ---- session reject ----
+  // Reject a question from the agent.
+  session
+    .command("reject <requestId>")
+    .description("Reject a question from the agent")
+    .action(async (requestId: string) => {
+      try {
+        const config = getConfig(program);
+        const client = getClient(config.baseUrl);
+
+        await client.question.reject({ requestID: requestId });
+        console.log(JSON.stringify({ rejected: requestId }));
       } catch (error) {
         printError(error instanceof Error ? error.message : "Unknown error");
       }

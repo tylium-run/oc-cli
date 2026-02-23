@@ -103,9 +103,10 @@ export function registerWatchCommand(program: Command): void {
 
         if (options.global) {
           // Global events — all instances.
+          // v2 API: global.event(options?) — signal goes in options (2nd style param)
           const { stream } = await client.global.event({
             signal: controller.signal,
-          });
+          } as Parameters<typeof client.global.event>[0]);
 
           for await (const globalEvent of stream) {
             const ge = globalEvent as unknown as {
@@ -133,15 +134,11 @@ export function registerWatchCommand(program: Command): void {
           }
         } else {
           // Instance-scoped events.
-          const subscribeOpts: Record<string, unknown> = {
-            signal: controller.signal,
-          };
-          if (options.directory) {
-            subscribeOpts.query = { directory: options.directory };
-          }
-
+          // v2 API: event.subscribe(params?, options?)
+          // params = { directory? }, options = { signal }
           const { stream } = await client.event.subscribe(
-            subscribeOpts as Parameters<typeof client.event.subscribe>[0],
+            options.directory ? { directory: options.directory } : undefined,
+            { signal: controller.signal } as Parameters<typeof client.event.subscribe>[1],
           );
 
           for await (const event of stream) {
