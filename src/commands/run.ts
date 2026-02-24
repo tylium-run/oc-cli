@@ -15,6 +15,7 @@ import { readFile } from "node:fs/promises";
 import { getClient } from "../lib/client.js";
 import { resolveConfig, type CliOverrides } from "../lib/config.js";
 import { printError } from "../lib/output.js";
+import { waitForSession } from "../lib/wait.js";
 
 /**
  * Read all of stdin into a string.
@@ -146,8 +147,34 @@ export function registerRunCommand(program: Command): void {
           promptParams as Parameters<typeof client.session.promptAsync>[0],
         );
 
-        console.log(JSON.stringify({ sessionId, status: "prompted" }));
+        // --- Wait for session completion ---
+        const controller = new AbortController();
+        process.on("SIGINT", () => {
+          controller.abort();
+          process.exit(0);
+        });
+
+        const result = await waitForSession(client, sessionId, {
+          timeout: options.timeout,
+          signal: controller.signal,
+          stream: options.stream,
+          pretty: options.pretty,
+        });
+
+        if (result.status === "idle") {
+          // Success — output session ID for downstream use.
+          console.log(JSON.stringify({ sessionId, status: "completed" }));
+        } else if (result.status === "timeout") {
+          printError(`Timeout: session ${sessionId} did not complete within ${options.timeout}s`);
+        } else {
+          // result.status === "error"
+          printError(`Session error: ${result.error}`);
+        }
       } catch (error) {
+        // AbortError is expected when user presses Ctrl+C.
+        if ((error as Error).name === "AbortError") {
+          process.exit(0);
+        }
         printError(error instanceof Error ? error.message : "Unknown error");
       }
     });
