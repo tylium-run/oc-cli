@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
 import { Command } from "commander";
 
 // Import command registration functions.
@@ -12,9 +16,13 @@ import { registerWatchCommand } from "./commands/watch.js";
 import { registerProfileCommands } from "./commands/profile.js";
 import { registerRunCommand } from "./commands/run.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const pkg = JSON.parse(readFileSync(resolve(__dirname, "../package.json"), "utf-8"));
+
 const program = new Command();
 
-program.name("oc-cli").description("CLI tool for managing OpenCode sessions").version("0.1.0");
+program.name("oc-cli").description("CLI tool for managing OpenCode sessions").version(pkg.version);
 
 // ---- Global options ----
 // These are available on EVERY command. Commander places them on program.opts().
