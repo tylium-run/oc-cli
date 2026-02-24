@@ -1,0 +1,120 @@
+// Run command: create a session, send a prompt, and wait for completion.
+//
+// This is a high-level convenience command that combines session creation,
+// prompting, and result waiting into a single invocation. It's the main
+// entry point for agents that want to run a prompt end-to-end without
+// manually orchestrating session lifecycle.
+//
+// Input sources (exactly one required):
+//   1. Inline text argument:  oc-cli run "do something"
+//   2. --file <path>:         reads prompt from a file
+//   3. --stdin:               reads prompt from piped stdin
+
+import { Command } from "commander";
+import { readFile } from "node:fs/promises";
+import { resolveConfig, type CliOverrides } from "../lib/config.js";
+import { printError } from "../lib/output.js";
+
+/**
+ * Read all of stdin into a string.
+ *
+ * Returns a promise that resolves once the stdin stream ends.
+ * If stdin is a TTY (no piped input), this would hang forever,
+ * so the caller should only invoke this when --stdin is set.
+ */
+function readStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    process.stdin.on("data", (chunk: Buffer) => chunks.push(chunk));
+    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    process.stdin.on("error", reject);
+  });
+}
+
+/**
+ * Read global options from the root program and resolve config.
+ * Passes the -p/--profile flag through to profile-based resolution.
+ */
+function getConfig(program: Command): ReturnType<typeof resolveConfig> {
+  const globalOpts = program.opts();
+  const overrides: CliOverrides = {};
+  if (globalOpts.baseUrl) overrides.baseUrl = globalOpts.baseUrl;
+  if (globalOpts.titlePrefix) overrides.titlePrefix = globalOpts.titlePrefix;
+  if (globalOpts.profile) overrides.profile = globalOpts.profile;
+  return resolveConfig(overrides);
+}
+
+export function registerRunCommand(program: Command): void {
+  program
+    .command("run [message]")
+    .description("Create a session, send a prompt, and wait for completion")
+    .option("-m, --model <provider/model>", "LLM model override (e.g. google/gemini-2.5-pro)")
+    .option("--agent <name>", "Agent to handle the prompt")
+    .option("--timeout <seconds>", "Timeout in seconds", parseInt)
+    .option("--stream", "Stream SSE events in real-time")
+    .option("--pretty", "Human-readable formatted output")
+    .option("--auto-approve", "Auto-approve permission requests")
+    .option("-f, --file <path>", "Read prompt from file")
+    .option("--stdin", "Read prompt from stdin")
+    .option("-d, --directory <dir>", "Working directory")
+    .action(async (message: string | undefined, options) => {
+      try {
+        // --- Validate exactly one input source ---
+        const sources = [
+          message !== undefined,
+          Boolean(options.file),
+          Boolean(options.stdin),
+        ].filter(Boolean).length;
+
+        if (sources === 0) {
+          printError(
+            "No message provided. Provide inline text, --file <path>, or --stdin.\n" +
+              'Usage: oc-cli run "message"',
+          );
+        }
+        if (sources > 1) {
+          printError(
+            "Multiple message sources provided. Use only one of: inline text, --file, or --stdin.",
+          );
+        }
+
+        // --- Read prompt text from the chosen source ---
+        let text: string;
+        if (options.file) {
+          text = await readFile(options.file, "utf-8");
+        } else if (options.stdin) {
+          text = await readStdin();
+        } else {
+          text = message!;
+        }
+
+        // Trim and validate — don't send empty prompts.
+        text = text.trim();
+        if (text.length === 0) {
+          printError("Message is empty after trimming whitespace.");
+        }
+
+        // --- Resolve config ---
+        const config = getConfig(program);
+
+        // --- Stub: log parsed options as JSON ---
+        console.log(
+          JSON.stringify({
+            stub: true,
+            prompt: text,
+            model: options.model ?? null,
+            agent: options.agent ?? config.defaultAgent ?? null,
+            timeout: options.timeout ?? null,
+            stream: options.stream ?? false,
+            pretty: options.pretty ?? false,
+            autoApprove: options.autoApprove ?? false,
+            directory: options.directory ?? config.directory ?? null,
+            baseUrl: config.baseUrl,
+            activeProfile: config.activeProfile,
+          }),
+        );
+      } catch (error) {
+        printError(error instanceof Error ? error.message : "Unknown error");
+      }
+    });
+}

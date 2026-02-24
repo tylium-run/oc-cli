@@ -10,6 +10,7 @@ import { registerModelsCommand } from "./commands/models.js";
 import { registerConfigCommands } from "./commands/config.js";
 import { registerWatchCommand } from "./commands/watch.js";
 import { registerProfileCommands } from "./commands/profile.js";
+import { registerRunCommand } from "./commands/run.js";
 
 const program = new Command();
 
@@ -28,5 +29,6 @@ registerModelsCommand(program);
 registerConfigCommands(program);
 registerWatchCommand(program);
 registerProfileCommands(program);
+registerRunCommand(program);
 
 program.parse();
