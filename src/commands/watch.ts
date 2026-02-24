@@ -14,7 +14,7 @@
 //
 // By default, outputs one JSON object per line (JSON Lines / NDJSON format).
 // With --pretty, shows a human-readable formatted stream with colors,
-// modeled after how OpenCode/Claude Code display streaming output.
+// modeled after how OpenCode displays streaming output.
 
 import { Command } from "commander";
 import chalk from "chalk";
