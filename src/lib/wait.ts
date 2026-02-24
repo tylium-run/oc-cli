@@ -184,7 +184,12 @@ export async function waitForSession(
       }
     }
 
-    // Stream ended without a terminal event — shouldn't normally happen.
+    // Stream ended without a terminal event.
+    // If timeout fired and the stream ended gracefully (rather than throwing
+    // AbortError), treat it as a timeout.
+    if (timedOut) {
+      return { status: "timeout" };
+    }
     return { status: "error", error: "SSE stream ended unexpectedly" };
   } catch (error) {
     // AbortError is expected from timeout or Ctrl+C.
