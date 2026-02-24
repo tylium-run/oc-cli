@@ -86,7 +86,7 @@ export function printErrorWithCode(message: string, code: number): never {
   process.exit(code);
 }
 
-// ---- Internal helpers ----
+// ---- Helpers ----
 
 /**
  * Filter rows where all key=value conditions match (case-insensitive contains).
@@ -98,7 +98,10 @@ export function printErrorWithCode(message: string, code: number): never {
  * Supports dot notation for nested fields:
  *   --filter summary.files=0     → rows where summary.files contains "0"
  */
-function filterData(data: Record<string, unknown>[], filters: string[]): Record<string, unknown>[] {
+export function filterData(
+  data: Record<string, unknown>[],
+  filters: string[],
+): Record<string, unknown>[] {
   // Parse each "key=value" string into a { key, value } pair.
   const conditions = filters.map((f) => {
     const eqIndex = f.indexOf("=");
@@ -129,7 +132,7 @@ function filterData(data: Record<string, unknown>[], filters: string[]): Record<
  * resolveDotPath({a: {b: 1}}, "a.b") → 1
  * resolveDotPath({a: 1}, "a.b") → undefined
  */
-function resolveDotPath(obj: Record<string, unknown>, path: string): unknown {
+export function resolveDotPath(obj: Record<string, unknown>, path: string): unknown {
   const parts = path.split(".");
   let current: unknown = obj;
   for (const part of parts) {
@@ -146,7 +149,10 @@ function resolveDotPath(obj: Record<string, unknown>, path: string): unknown {
  * Example: filterFields([{id: 1, name: "a", extra: true}], "id,name")
  *        → [{id: 1, name: "a"}]
  */
-function filterFields(data: Record<string, unknown>[], fields: string): Record<string, unknown>[] {
+export function filterFields(
+  data: Record<string, unknown>[],
+  fields: string,
+): Record<string, unknown>[] {
   const keys = fields.split(",").map((f) => f.trim());
   return data.map((item) => {
     const filtered: Record<string, unknown> = {};
