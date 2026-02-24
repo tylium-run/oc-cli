@@ -15,6 +15,7 @@ import { readFile } from "node:fs/promises";
 import { getClient } from "../lib/client.js";
 import { resolveConfig, type CliOverrides } from "../lib/config.js";
 import { printError } from "../lib/output.js";
+import { extractTextOutput, type MessageData } from "../lib/text-extract.js";
 import { waitForSession } from "../lib/wait.js";
 
 /**
@@ -163,8 +164,30 @@ export function registerRunCommand(program: Command): void {
         });
 
         if (result.status === "idle") {
-          // Success — output session ID for downstream use.
-          console.log(JSON.stringify({ sessionId, status: "completed" }));
+          // Fetch all messages for the completed session.
+          const msgResult = await client.session.messages({ sessionID: sessionId });
+          const messages = msgResult.data as unknown as MessageData[];
+
+          // Extract last assistant text using shared extraction logic.
+          const textLines = extractTextOutput(messages, {});
+          const lastAssistantText = textLines.length > 0 ? textLines.join("\n") : null;
+
+          if (options.pretty && !options.stream) {
+            // --pretty (non-streaming): output just the final text for piping.
+            if (lastAssistantText) {
+              console.log(lastAssistantText);
+            }
+          } else {
+            // Default: structured JSON with full context.
+            console.log(
+              JSON.stringify({
+                sessionId,
+                status: "completed",
+                messages: messages.length,
+                lastAssistantText,
+              }),
+            );
+          }
         } else if (result.status === "timeout") {
           printError(`Timeout: session ${sessionId} did not complete within ${options.timeout}s`);
         } else {
