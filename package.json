@@ -1,6 +1,6 @@
 {
   "name": "oc-agent-cli",
-  "version": "0.1.2-beta.0",
+  "version": "0.1.2-beta.2",
   "description": "CLI for AI agents to manage remote codebases via OpenCode",
   "type": "module",
   "main": "dist/index.js",
