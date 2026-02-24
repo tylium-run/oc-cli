@@ -209,6 +209,7 @@ export function registerSessionCommands(program: Command): void {
     .option("-m, --model <provider/model>", "Override the LLM model (e.g. google/gemini-2.5-pro)")
     .option("--agent <name>", "Specify which agent handles the prompt")
     .option("--tools <json>", "JSON map of tool name to enabled boolean")
+    .option("--allow-questions", "Allow the agent to ask questions (disabled by default)")
     .option("--no-reply", "Send the message without triggering an agent response")
     .action(async (sessionId: string, message: string | undefined, options) => {
       try {
@@ -290,6 +291,15 @@ export function registerSessionCommands(program: Command): void {
             );
             return;
           }
+        }
+
+        // Disable the question tool by default. When an agent asks a question,
+        // execution blocks until someone answers — unhelpful for non-interactive
+        // CLI usage. Pass --allow-questions to re-enable.
+        if (!options.allowQuestions) {
+          const toolsObj = (params.tools ?? {}) as Record<string, boolean>;
+          toolsObj.question = false;
+          params.tools = toolsObj;
         }
 
         // Commander's --no-reply convention: when you define --no-reply,

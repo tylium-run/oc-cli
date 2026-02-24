@@ -57,6 +57,8 @@ export function registerRunCommand(program: Command): void {
     .option("--stream", "Stream SSE events in real-time")
     .option("--pretty", "Human-readable formatted output")
     .option("--auto-approve", "Auto-approve permission requests")
+    .option("--tools <json>", "JSON map of tool name to enabled boolean")
+    .option("--allow-questions", "Allow the agent to ask questions (disabled by default)")
     .option("-f, --file <path>", "Read prompt from file")
     .option("--stdin", "Read prompt from stdin")
     .option("-d, --directory <dir>", "Working directory")
@@ -142,6 +144,26 @@ export function registerRunCommand(program: Command): void {
           promptParams.agent = options.agent;
         } else if (config.defaultAgent) {
           promptParams.agent = config.defaultAgent;
+        }
+
+        // --tools flag
+        if (options.tools) {
+          try {
+            promptParams.tools = JSON.parse(options.tools);
+          } catch {
+            printError(
+              `Invalid --tools JSON: "${options.tools}". Expected a JSON object like '{"read":true,"write":false}'.`,
+            );
+          }
+        }
+
+        // Disable the question tool by default. When an agent asks a question,
+        // execution blocks until someone answers — unhelpful for non-interactive
+        // CLI usage. Pass --allow-questions to re-enable.
+        if (!options.allowQuestions) {
+          const toolsObj = (promptParams.tools ?? {}) as Record<string, boolean>;
+          toolsObj.question = false;
+          promptParams.tools = toolsObj;
         }
 
         await client.session.promptAsync(
