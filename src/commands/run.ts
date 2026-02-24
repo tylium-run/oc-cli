@@ -12,6 +12,7 @@
 
 import { Command } from "commander";
 import { readFile } from "node:fs/promises";
+import { getClient } from "../lib/client.js";
 import { resolveConfig, type CliOverrides } from "../lib/config.js";
 import { printError } from "../lib/output.js";
 
@@ -96,23 +97,56 @@ export function registerRunCommand(program: Command): void {
 
         // --- Resolve config ---
         const config = getConfig(program);
+        const directory = options.directory ?? config.directory;
+        const client = getClient(config.baseUrl, directory);
 
-        // --- Stub: log parsed options as JSON ---
-        console.log(
-          JSON.stringify({
-            stub: true,
-            prompt: text,
-            model: options.model ?? null,
-            agent: options.agent ?? config.defaultAgent ?? null,
-            timeout: options.timeout ?? null,
-            stream: options.stream ?? false,
-            pretty: options.pretty ?? false,
-            autoApprove: options.autoApprove ?? false,
-            directory: options.directory ?? config.directory ?? null,
-            baseUrl: config.baseUrl,
-            activeProfile: config.activeProfile,
-          }),
+        // --- Create session ---
+        const titleBody = text.length > 50 ? text.slice(0, 50) + "…" : text;
+        let title = `run: ${titleBody}`;
+        if (config.titlePrefix) {
+          title = config.titlePrefix + title;
+        }
+
+        const sessionResult = await client.session.create({
+          title,
+          ...(directory && { directory }),
+        });
+
+        const sessionData = sessionResult.data as unknown as Record<string, unknown>;
+        const sessionId = sessionData.id as string;
+
+        // --- Fire the prompt ---
+        const promptParams: Record<string, unknown> = {
+          sessionID: sessionId,
+          parts: [{ type: "text", text }],
+        };
+
+        // --model google/gemini-2.5-pro → { providerID: "google", modelID: "gemini-2.5-pro" }
+        if (options.model) {
+          const slashIndex = options.model.indexOf("/");
+          if (slashIndex === -1) {
+            printError(
+              `Invalid --model format: "${options.model}". Expected provider/model (e.g. google/gemini-2.5-pro).`,
+            );
+          }
+          promptParams.model = {
+            providerID: options.model.slice(0, slashIndex),
+            modelID: options.model.slice(slashIndex + 1),
+          };
+        }
+
+        // --agent flag overrides profile's defaultAgent.
+        if (options.agent) {
+          promptParams.agent = options.agent;
+        } else if (config.defaultAgent) {
+          promptParams.agent = config.defaultAgent;
+        }
+
+        await client.session.promptAsync(
+          promptParams as Parameters<typeof client.session.promptAsync>[0],
         );
+
+        console.log(JSON.stringify({ sessionId, status: "prompted" }));
       } catch (error) {
         printError(error instanceof Error ? error.message : "Unknown error");
       }
