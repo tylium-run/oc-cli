@@ -93,7 +93,7 @@ export async function waitForSession(
   }
 
   // Optional streaming state.
-  const fmtState = options?.stream ? createFormatterState() : null;
+  const fmtState = options?.stream ? createFormatterState(process.stderr) : null;
 
   try {
     const { stream } = await client.event.subscribe(undefined, {

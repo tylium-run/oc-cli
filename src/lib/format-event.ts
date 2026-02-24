@@ -40,9 +40,19 @@ export interface FormatterState {
   assistantHeaderShown: Set<string>;
   /** Sessions where we've already printed the user header */
   userHeaderShown: Set<string>;
+  /** Output stream for direct writes (deltas, newlines). Defaults to process.stdout. */
+  writer: NodeJS.WriteStream;
 }
 
-export function createFormatterState(): FormatterState {
+/**
+ * Create a new formatter state.
+ *
+ * @param writer - Output stream for direct writes (deltas, end-of-stream newlines).
+ *                 Defaults to `process.stdout` which is correct for the `watch` command.
+ *                 Pass `process.stderr` when used from the `run` command so stdout
+ *                 stays clean for the final JSON result.
+ */
+export function createFormatterState(writer?: NodeJS.WriteStream): FormatterState {
   return {
     messageRoles: new Map(),
     messageModels: new Map(),
@@ -53,6 +63,7 @@ export function createFormatterState(): FormatterState {
     hasOutput: false,
     assistantHeaderShown: new Set(),
     userHeaderShown: new Set(),
+    writer: writer ?? process.stdout,
   };
 }
 
@@ -71,7 +82,7 @@ function truncate(text: string, maxLen: number): string {
 /** Ensure newline after streaming text before printing a block. */
 function endStreaming(state: FormatterState): void {
   if (state.lastPartType === "text-stream" || state.lastPartType === "reasoning") {
-    process.stdout.write("\n");
+    state.writer.write("\n");
   }
 }
 
@@ -233,9 +244,9 @@ export function formatEvent(event: Record<string, unknown>, state: FormatterStat
         ensureHeader(messageId, role, model, state, lines);
         // Flush header lines first.
         for (const l of lines.splice(0)) {
-          console.log(l);
+          state.writer.write(l + "\n");
         }
-        process.stdout.write(delta);
+        state.writer.write(delta);
         state.lastPartType = "text-stream";
         state.hasOutput = true;
       }
