@@ -1,4 +1,4 @@
-// Session commands: list, create, delete, messages, prompt
+// Session commands: list, create, delete, messages, prompt, wait
 //
 // Uses the v2 SDK which has a simpler parameter style:
 //   v1: client.session.create({ body: { title }, query: { directory } })
@@ -8,8 +8,9 @@ import { Command } from "commander";
 import { readFile } from "node:fs/promises";
 import { getClient } from "../lib/client.js";
 import { resolveConfig, type Config, type CliOverrides } from "../lib/config.js";
-import { printData, printError } from "../lib/output.js";
+import { printData, printError, printErrorWithCode } from "../lib/output.js";
 import { extractTextOutput, validateTextOptions, type MessageData } from "../lib/text-extract.js";
+import { checkSessionStatus, waitForSession, type WaitResult } from "../lib/wait.js";
 
 /**
  * Read all of stdin into a string.
@@ -375,4 +376,105 @@ export function registerSessionCommands(program: Command): void {
         printError(error instanceof Error ? error.message : "Unknown error");
       }
     });
+
+  // ---- session wait ----
+  // Block until a session reaches idle state (or timeout/error).
+  //
+  // Exit codes:
+  //   0 — session reached idle
+  //   1 — session error (unrecoverable)
+  //   2 — timeout (--timeout exceeded)
+  //   3 — connection error (server unreachable, network failure)
+  //
+  // Two-phase approach:
+  //   Phase 1: Pre-flight status check (fast path for already-idle sessions).
+  //   Phase 2: SSE subscription to wait for state transitions.
+  session
+    .command("wait <sessionId>")
+    .description("Wait for a session to reach idle state")
+    .option("--timeout <seconds>", "Timeout in seconds (exit code 2 on timeout)", parseInt)
+    .option("--stream", "Stream SSE events to stderr while waiting")
+    .option("--pretty", "Human-readable formatted output")
+    .action(
+      async (
+        sessionId: string,
+        options: { timeout?: number; stream?: boolean; pretty?: boolean },
+      ) => {
+        try {
+          const config = getConfig(program);
+          const client = getClient(config.baseUrl, config.directory);
+
+          // Phase 1: Pre-flight status check — fast path if already idle.
+          let initialStatus: Awaited<ReturnType<typeof checkSessionStatus>>;
+          try {
+            initialStatus = await checkSessionStatus(client, sessionId);
+          } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : "Unknown error";
+            if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+              printError(`Session not found: ${sessionId}`);
+            }
+            printErrorWithCode(`Connection error: ${msg}`, 3);
+          }
+
+          if (initialStatus.type === "idle") {
+            console.log(
+              JSON.stringify({
+                sessionId,
+                status: "idle",
+                source: "status_check",
+              }),
+            );
+            process.exit(0);
+          }
+
+          // Phase 2: SSE subscription — wait for idle/error/timeout.
+          const controller = new AbortController();
+          process.on("SIGINT", () => {
+            controller.abort();
+            process.exit(0);
+          });
+
+          let result: WaitResult;
+          try {
+            result = await waitForSession(client, sessionId, {
+              timeout: options.timeout,
+              signal: controller.signal,
+              stream: options.stream,
+              pretty: options.pretty,
+            });
+          } catch (error: unknown) {
+            if ((error as Error)?.name === "AbortError") {
+              process.exit(0);
+            }
+            const msg = error instanceof Error ? error.message : "Unknown error";
+            printErrorWithCode(`Connection error: ${msg}`, 3);
+          }
+
+          // Phase 3: Map result to exit codes.
+          if (result.status === "idle") {
+            console.log(
+              JSON.stringify({
+                sessionId,
+                status: "idle",
+                source: "sse",
+              }),
+            );
+            process.exit(0);
+          } else if (result.status === "timeout") {
+            printErrorWithCode(
+              `Timeout: session ${sessionId} did not reach idle within ${options.timeout}s`,
+              2,
+            );
+          } else {
+            // result.status === "error"
+            printError(`Session error: ${result.error ?? "unknown"}`);
+          }
+        } catch (error: unknown) {
+          if ((error as Error)?.name === "AbortError") {
+            process.exit(0);
+          }
+          printError(error instanceof Error ? error.message : "Unknown error");
+        }
+      },
+    );
 }

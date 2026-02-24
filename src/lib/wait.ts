@@ -12,7 +12,7 @@
 // Optionally streams events to stderr (--stream mode) so stdout stays clean
 // for the final JSON result.
 
-import { type OpencodeClient } from "@opencode-ai/sdk/v2";
+import { type OpencodeClient, type SessionStatus } from "@opencode-ai/sdk/v2";
 import { formatEvent, createFormatterState } from "./format-event.js";
 
 // ---- Types ----
@@ -58,6 +58,41 @@ function eventMatchesSession(evt: Record<string, unknown>, targetSessionId: stri
   const part = p.part as Record<string, unknown> | undefined;
   if (part?.sessionID === targetSessionId) return true;
   return false;
+}
+
+// ---- Status Check ----
+
+/**
+ * Check the current status of a session without subscribing to SSE.
+ *
+ * Performs a two-step check:
+ *   1. Verify the session exists (GET /session/:id — throws on 404).
+ *   2. Fetch the status map (GET /session/status) and look up the session.
+ *
+ * If the session has no entry in the status map, it is considered idle.
+ *
+ * @param client    - The OpenCode SDK client.
+ * @param sessionId - The session to check.
+ * @returns The current status of the session.
+ * @throws If the session does not exist (404) or the request fails.
+ */
+export async function checkSessionStatus(
+  client: OpencodeClient,
+  sessionId: string,
+): Promise<SessionStatus> {
+  // Verify session exists (throws on 404).
+  await client.session.get({ sessionID: sessionId });
+
+  // Check current status.
+  const result = await client.session.status();
+  const statusMap = result.data as unknown as Record<string, SessionStatus>;
+  const status = statusMap[sessionId];
+
+  // No entry in the map means the session is idle.
+  if (!status) {
+    return { type: "idle" };
+  }
+  return status;
 }
 
 // ---- Main ----

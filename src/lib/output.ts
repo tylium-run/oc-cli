@@ -72,6 +72,20 @@ export function printError(message: string): never {
   process.exit(1);
 }
 
+/**
+ * Print an error as JSON to stderr and exit with a specific exit code.
+ *
+ * Use this when the exit code carries semantic meaning (e.g. 2 = timeout,
+ * 3 = connection error) so callers can distinguish failure modes.
+ *
+ * @param message - Human-readable error message.
+ * @param code    - Process exit code (non-zero).
+ */
+export function printErrorWithCode(message: string, code: number): never {
+  console.error(JSON.stringify({ error: message }));
+  process.exit(code);
+}
+
 // ---- Internal helpers ----
 
 /**
