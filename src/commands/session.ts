@@ -169,13 +169,24 @@ export function registerSessionCommands(program: Command): void {
           return;
         }
 
-        // Default mode: structured data output
+        // Default mode: structured data output.
+        // The SDK returns { info: Message; parts: Part[] }[] — flatten
+        // so that printData can access top-level keys like "role" and "id".
+        const messages = result.data as unknown as MessageData[];
+        const flat = messages.map((m) => ({
+          role: m.info.role,
+          id: m.info.id,
+          sessionID: m.info.sessionID,
+          parts: m.parts.length,
+        }));
+
         const columns = [
           { key: "role", label: "ROLE", width: 12 },
           { key: "id", label: "ID", width: 35 },
+          { key: "parts", label: "PARTS", width: 8 },
         ];
 
-        printData(result.data as unknown as Record<string, unknown>[], options, columns);
+        printData(flat as unknown as Record<string, unknown>[], options, columns);
       } catch (error) {
         printError(error instanceof Error ? error.message : "Unknown error");
       }

@@ -4,9 +4,11 @@
 // extract text content from message arrays. Extracted from the
 // session messages command to enable unit testing.
 
+import { type Message, type Part } from "@opencode-ai/sdk/v2";
+
 export interface MessageData {
-  info: Record<string, unknown>;
-  parts: Record<string, unknown>[];
+  info: Message;
+  parts: Part[];
 }
 
 export interface TextOptions {
@@ -43,10 +45,12 @@ export function extractTextOutput(messages: MessageData[], options: TextOptions)
 
   if (options.all) {
     for (const msg of messages) {
-      const role = msg.info.role as string;
-      const textParts = msg.parts.filter((p) => p.type === "text");
+      const role = msg.info.role;
+      const textParts = msg.parts.filter(
+        (p): p is Extract<Part, { type: "text" }> => p.type === "text",
+      );
       if (textParts.length === 0) continue;
-      const text = textParts.map((p) => p.text as string).join("\n");
+      const text = textParts.map((p) => p.text).join("\n");
       lines.push(`[${role}] ${text}`);
     }
   } else {
@@ -54,9 +58,11 @@ export function extractTextOutput(messages: MessageData[], options: TextOptions)
     const assistantMessages = messages.filter((m) => m.info.role === "assistant");
     for (let i = assistantMessages.length - 1; i >= 0; i--) {
       const msg = assistantMessages[i];
-      const textParts = msg.parts.filter((p) => p.type === "text");
+      const textParts = msg.parts.filter(
+        (p): p is Extract<Part, { type: "text" }> => p.type === "text",
+      );
       if (textParts.length === 0) continue;
-      const text = textParts.map((p) => p.text as string).join("\n");
+      const text = textParts.map((p) => p.text).join("\n");
       lines.push(text);
       break;
     }

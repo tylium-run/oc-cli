@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { type Message, type Part } from "@opencode-ai/sdk/v2";
 import {
   extractTextOutput,
   validateTextOptions,
@@ -6,18 +7,20 @@ import {
 } from "../src/lib/text-extract.js";
 
 // ---- Fixture Factories ----
+// These use partial objects cast to SDK types since extractTextOutput
+// only accesses .info.role, .parts[].type, and .parts[].text.
 
-function msg(role: string, ...texts: string[]): MessageData {
+function msg(role: "user" | "assistant", ...texts: string[]): MessageData {
   return {
-    info: { role },
-    parts: texts.map((t) => ({ type: "text", text: t })),
+    info: { role } as Message,
+    parts: texts.map((t) => ({ type: "text" as const, text: t }) as Part),
   };
 }
 
-function toolMsg(role: string): MessageData {
+function toolMsg(role: "user" | "assistant"): MessageData {
   return {
-    info: { role },
-    parts: [{ type: "tool_use", name: "bash" }],
+    info: { role } as Message,
+    parts: [{ type: "tool" as const, tool: "bash" } as Part],
   };
 }
 
