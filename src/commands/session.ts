@@ -9,6 +9,7 @@ import { readFile } from "node:fs/promises";
 import { getClient } from "../lib/client.js";
 import { resolveConfig, type Config, type CliOverrides } from "../lib/config.js";
 import { printData, printError } from "../lib/output.js";
+import { extractTextOutput, validateTextOptions, type MessageData } from "../lib/text-extract.js";
 
 /**
  * Read all of stdin into a string.
@@ -152,14 +153,8 @@ export function registerSessionCommands(program: Command): void {
     .option("--all", "With --text, output all messages (not just last assistant)")
     .action(async (id: string, options) => {
       try {
-        // --all requires --text
-        if (options.all && !options.text) {
-          printError("--all requires --text. Usage: oc-cli session messages <id> --text --all");
-        }
-        // --text is incompatible with --pretty
-        if (options.text && options.pretty) {
-          printError("--text and --pretty are mutually exclusive.");
-        }
+        const validationError = validateTextOptions(options);
+        if (validationError) printError(validationError);
 
         const config = getConfig(program);
         const client = getClient(config.baseUrl, config.directory);
@@ -168,32 +163,9 @@ export function registerSessionCommands(program: Command): void {
 
         // --text mode: extract raw text content and print to stdout
         if (options.text) {
-          const messages = result.data as unknown as {
-            info: Record<string, unknown>;
-            parts: Record<string, unknown>[];
-          }[];
-
-          if (options.all) {
-            // Output ALL messages' text, prefixed with [role]
-            for (const msg of messages) {
-              const role = msg.info.role as string;
-              const textParts = msg.parts.filter((p) => p.type === "text");
-              if (textParts.length === 0) continue;
-              const text = textParts.map((p) => p.text as string).join("\n");
-              console.log(`[${role}] ${text}`);
-            }
-          } else {
-            // Default: extract last assistant message with text content
-            const assistantMessages = messages.filter((m) => m.info.role === "assistant");
-            for (let i = assistantMessages.length - 1; i >= 0; i--) {
-              const msg = assistantMessages[i];
-              const textParts = msg.parts.filter((p) => p.type === "text");
-              if (textParts.length === 0) continue;
-              const text = textParts.map((p) => p.text as string).join("\n");
-              console.log(text);
-              break;
-            }
-          }
+          const messages = result.data as unknown as MessageData[];
+          const lines = extractTextOutput(messages, options);
+          for (const line of lines) console.log(line);
           return;
         }
 
