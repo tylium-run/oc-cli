@@ -34,6 +34,8 @@ export interface WaitOptions {
   stream?: boolean;
   /** If true, use pretty formatting for streamed events. */
   pretty?: boolean;
+  /** If true, auto-reply "always" to permission.asked events. */
+  autoApprove?: boolean;
 }
 
 // ---- Helpers ----
@@ -118,6 +120,18 @@ export async function waitForSession(
           }
         } else {
           process.stderr.write(JSON.stringify(event) + "\n");
+        }
+      }
+
+      // Auto-approve permission requests when --auto-approve is set.
+      if (type === "permission.asked" && options?.autoApprove) {
+        const props = (evt.properties ?? {}) as Record<string, unknown>;
+        const requestId = props.id as string;
+        if (requestId) {
+          await client.permission.reply({
+            requestID: requestId,
+            reply: "always",
+          });
         }
       }
 

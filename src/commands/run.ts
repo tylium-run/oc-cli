@@ -159,6 +159,7 @@ export function registerRunCommand(program: Command): void {
           signal: controller.signal,
           stream: options.stream,
           pretty: options.pretty,
+          autoApprove: options.autoApprove,
         });
 
         if (result.status === "idle") {
